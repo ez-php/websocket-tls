@@ -1,0 +1,375 @@
+# Coding Guidelines
+
+Applies to the entire ez-php project — framework core, all modules, and the application template.
+
+---
+
+## Environment
+
+- PHP **8.5**, Composer for dependency management
+- All project based commands run **inside Docker** — never directly on the host
+
+```
+docker compose exec app <command>
+```
+
+Container name: `ez-php-app`, service name: `app`.
+
+---
+
+## Quality Suite
+
+Run after every change:
+
+```
+docker compose exec app composer full
+```
+
+Executes in order:
+1. `sync_guidelines.php --check` — fails if any `CLAUDE.md` has drifted from this file
+2. `check_test_classes.php` — fails on a duplicate test class name (all packages share the `Tests\` namespace, so a collision is a fatal error in the aggregated run, not a test failure)
+3. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
+4. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
+   *(Note: `@PHP85Migration` does not exist yet in php-cs-fixer; `@PHP83Migration` is the highest available and is used intentionally even though the project targets PHP 8.5)*
+5. `phpunit` — all tests with coverage
+
+Individual commands when needed:
+```
+composer analyse             # PHPStan only
+composer cs                  # CS Fixer only
+composer test                # PHPUnit only
+composer guidelines:check    # CLAUDE.md drift only
+composer test-classes:check  # duplicate test class names only
+```
+
+**PHPStan:** never suppress with `@phpstan-ignore-line` — always fix the root cause.
+
+---
+
+## Coding Standards
+
+- `declare(strict_types=1)` at the top of every PHP file
+- Typed properties, parameters, and return values — avoid `mixed`
+- PHPDoc on every class and public method
+- One responsibility per class — keep classes small and focused
+- Constructor injection — no service locator pattern
+- No global state unless intentional and documented
+- Concrete classes are `final` — extend behavior through composition, not inheritance. Exception-hierarchy base classes (e.g. `EzPhpException`, `HttpException`, `CacheException`) are one carve-out, since they exist specifically to be extended. A documented template-method-style base class (e.g. `Mailable`, meant to be configured via constructor-time subclassing) is the other — the owning module's `CLAUDE.md` must record it under Design Decisions.
+
+**Naming:**
+
+| Thing | Convention |
+|---|---|
+| Classes / Interfaces | `PascalCase` |
+| Methods / variables | `camelCase` |
+| Constants | `UPPER_CASE` |
+| Files | Match class name exactly |
+
+**Principles:** SOLID · KISS · DRY · YAGNI
+
+---
+
+## Workflow & Behavior
+
+- Write tests **before or alongside** production code (test-first)
+- Read and understand the relevant code before making any changes
+- Modify the minimal number of files necessary
+- Keep implementations small — if it feels big, it likely belongs in a separate module
+- No hidden magic — everything must be explicit and traceable
+- No large abstractions without clear necessity
+- No heavy dependencies — check if PHP stdlib suffices first
+- Respect module boundaries — don't reach across packages
+- Keep the framework core small — what belongs in a module stays there
+- Document architectural reasoning for non-obvious design decisions
+- Do not change public APIs unless necessary
+- Prefer composition over inheritance — no premature abstractions
+
+---
+
+## New Modules & CLAUDE.md Files
+
+### 1 — Required files
+
+Every module under `modules/<name>/` must have:
+
+| File | Purpose |
+|---|---|
+| `composer.json` | package definition, deps, autoload |
+| `phpstan.neon` | static analysis config, level 9 |
+| `phpunit.xml` | test suite config |
+| `.php-cs-fixer.php` | code style config |
+| `.gitignore` | ignore `vendor/`, `.env`, cache |
+| `.env.example` | environment variable defaults (copy to `.env` on first run) |
+| `docker-compose.yml` | Docker Compose service definition (always `container_name: ez-php-<name>-app`) |
+| `docker/app/Dockerfile` | module Docker image (`FROM au9500/php:8.5`) |
+| `docker/app/container-start.sh` | container entrypoint: `composer install` → `sleep infinity` |
+| `docker/app/php.ini` | PHP ini overrides (`memory_limit`, `display_errors`, `xdebug.mode`) |
+| `.github/workflows/ci.yml` | standalone CI pipeline |
+| `README.md` | public documentation |
+| `tests/TestCase.php` | base test case for the module |
+| `start.sh` | convenience script: copy `.env`, bring up Docker, wait for services, exec shell |
+| `CLAUDE.md` | see section 2 below |
+
+### 2 — CLAUDE.md structure
+
+Every module `CLAUDE.md` must follow this exact structure:
+
+1. **Full content of `CODING_GUIDELINES.md`, verbatim** — copy it as-is, do not summarize or shorten
+2. A `---` separator
+3. `# Package: ez-php/<name>` (or `# Directory: <name>` for non-package directories)
+4. Module-specific section covering:
+   - Source structure — file tree with one-line description per file
+   - Key classes and their responsibilities
+   - Design decisions and constraints
+   - Testing approach and infrastructure requirements (MySQL, Redis, etc.)
+   - What does **not** belong in this module
+
+**Do not edit part 1 by hand.** It is generated from `CODING_GUIDELINES.md` by
+`sync_guidelines.php` at the project root:
+
+```
+php sync_guidelines.php            # rewrite every out-of-sync CLAUDE.md
+php sync_guidelines.php --check    # report drift, exit 1 if any (CI / pre-commit)
+```
+
+Edit `CODING_GUIDELINES.md`, then run the script — it replaces everything before the
+`# Package:` / `# Directory:` / `# Project:` heading and preserves the hand-written
+section below it byte-for-byte. Editing a single copy only creates drift; before this
+script existed, all 40 copies had diverged.
+
+### 3 — Scaffolding a new module
+
+`make_module.php` at the project root writes the required-file set and the monorepo
+wiring in one step, wrapping `docker-init` for the Docker subset:
+
+```
+composer module:make <name> -- --description="..."
+php make_module.php <name> --description="..." --services=mysql,redis
+```
+
+`<name>` is the kebab-case package name; the namespace is derived as
+`EzPhp\<PascalCase>` unless `--namespace=` overrides it (`bignum` → `BigNum`,
+`opcache` → `OPCache`, and `dotenv` → `Env` are existing exceptions the guess
+gets wrong).
+
+To bring in a module whose code already lives in its own repository instead of
+generating a fresh skeleton, pass `--repo=` with a git URL:
+
+```
+php make_module.php <name> --repo=<git-url> [--namespace=Foo]
+```
+
+This runs `git submodule add <url> modules/<name>` instead of writing package
+files, then applies the same monorepo wiring below. It is mutually exclusive
+with `--services` and `--description` — a submodule brings its own Docker
+scaffold (if any) and its own `composer.json` description. A minimal `CLAUDE.md`
+stub is written only if the submodule doesn't already ship one, so
+`composer guidelines:sync` has a `# Package:` heading to anchor part 1 against.
+
+It writes `modules/<name>/` and registers the module in the four places the monorepo
+needs it — root `composer.json` (`autoload.psr-4`), `phpstan.neon`, `phpunit.xml`
+(test suite **and** coverage source), and `packages.sh` (alphabetical position).
+
+Two things stay manual on purpose:
+
+- **`CLAUDE.md` part 1** — only the `# Package:` section is generated. Run
+  `composer guidelines:sync` afterwards; baking a guidelines copy into the generator
+  would recreate the drift the sync script exists to prevent.
+- **The host-port table below** (`--services` only) — editing it marks all ~40
+  `CLAUDE.md` copies as drifted at once, so the next `composer full` would fail for
+  a brand-new module. The generator prints which ports to claim instead.
+
+### 4 — Docker scaffold
+
+Run from the new module root (requires `"ez-php/docker": "^2.0"` in `require-dev`):
+
+```
+vendor/bin/docker-init
+```
+
+This copies `Dockerfile`, `docker-compose.yml`, `.env.example`, `start.sh`, and `docker/` into the module, replacing `{{MODULE_NAME}}` placeholders. Existing files are never overwritten.
+
+Pass `--services` to merge MySQL/Redis/Meilisearch service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
+
+```
+vendor/bin/docker-init --services=mysql
+vendor/bin/docker-init --services=redis
+vendor/bin/docker-init --services=meilisearch
+vendor/bin/docker-init --services=mysql,redis
+```
+
+After scaffolding:
+
+1. Adapt `docker-compose.yml` — add or remove services (MySQL, Redis, Meilisearch) as needed
+2. Adapt `.env.example` — fill in connection defaults matching the services above
+3. Assign a unique host port for each exposed service (see table below)
+
+**Allocated host ports:**
+
+| Package | `DB_HOST_PORT` (MySQL) | Redis host port | `MEILISEARCH_PORT` |
+|---|---|---|---|
+| root (`ez-php-project`) | 3306 | 6379 (`REDIS_PORT`) | 7700 |
+| `ez-php/framework` | 3307 | — | — |
+| `ez-php/orm` | 3309 | — | — |
+| `ez-php/cache` | — | 6380 (`REDIS_HOST_PORT`) | — |
+| `ez-php/queue` | 3310 | 6381 (`REDIS_HOST_PORT`) | — |
+| `ez-php/rate-limiter` | — | 6382 (`REDIS_HOST_PORT`) | — |
+| `ez-php/search` | — | — | 7701 |
+| **next free** | **3311** | **6383** | **7702** |
+
+Only set a port for services the module actually uses. Modules without external services need no port config.
+
+> The `MEILISEARCH_PORT` column is the **host** port. Inside a Compose network the service is always reachable at `http://meilisearch:7700` regardless of the host mapping — only publish-side ports need to be unique.
+
+> The "Redis host port" column is likewise the **host**-published port. `ez-php/cache`, `ez-php/queue`, and `ez-php/rate-limiter` map it through a separate `REDIS_HOST_PORT` env var in `docker-compose.yml`, keeping `REDIS_PORT` fixed at `6379` for in-container connections (the app container always reaches Redis at `redis:6379` over the Compose network, regardless of the host mapping) — the root project is the one exception, since it has no host/container split and uses `REDIS_PORT` for both.
+
+> This table tracks only MySQL, Redis, and Meilisearch ports — the three services shared across multiple modules where a collision is otherwise easy to introduce. `ez-php/mail`'s Mailpit service is the one other module with published host ports: SMTP `1025` and web UI `8025`, mapped through `MAILPIT_SMTP_HOST_PORT`/`MAILPIT_API_HOST_PORT` in `modules/mail/docker-compose.yml` (mirroring the `*_HOST_PORT` pattern above), documented in `modules/mail/.env.example`. It isn't a table column because no other module runs Mailpit, so there is nothing to collide with — but a new module adding its own single-use service's ports should likewise parameterize them and document the defaults in its own `.env.example` rather than adding a column here.
+
+### 5 — Monorepo scripts
+
+`packages.sh` at the project root is the **central package registry**. Both `push_all.sh` and `update_all.sh` source it — the package list lives in exactly one place.
+
+When adding a new module, add `"$ROOT/modules/<name>"` to the `PACKAGES` array in `packages.sh` in **alphabetical order** among the other `modules/*` entries (before `framework`, `ez-php`, and the root entry at the end).
+
+---
+
+# Package: ez-php/websocket-tls
+
+TLS/WSS termination for `ez-php/websocket` — an `ssl://` listener and Fiber event loop that hands negotiated connections to the plain WebSocket server's `Connection`/`HandlerInterface`.
+
+> This file is the module-specific half. The coding guidelines above it are
+> generated by `sync_guidelines.php` — run `composer guidelines:sync` from the
+> monorepo root to fill them in. Never edit that part by hand.
+
+---
+
+## Source Structure
+
+```
+src/
+├── TlsServerException.php   — thrown when the TLS listener cannot be created
+├── CryptoNegotiator.php     — drives stream_socket_enable_crypto() to completion within a timeout
+└── TlsServer.php            — ssl:// listener + Fiber event loop, mirroring ez-php/websocket's Server
+
+tests/
+├── TestCase.php              — Base PHPUnit test case
+├── TestCertificate.php       — generates a throwaway self-signed cert/key pair for TLS tests
+├── CryptoNegotiatorTest.php  — real TLS handshakes over loopback TCP sockets
+└── TlsServerTest.php         — constructor/accessors, run() failure modes
+```
+
+---
+
+## Key Classes and Responsibilities
+
+### TlsServerException (`src/TlsServerException.php`)
+
+Single exception type for this module. Thrown by `TlsServer::run()` when the
+`ssl://` listener cannot be created (bad certificate path, port already bound,
+etc.).
+
+---
+
+### CryptoNegotiator (`src/CryptoNegotiator.php`)
+
+Wraps `stream_socket_enable_crypto()`, which on a non-blocking stream returns
+`0` (not `false`) while it still needs more bytes from the peer. `negotiate()`
+retries the call, waiting for the socket to become readable between attempts
+(via `stream_select()`, capped at 50ms per wait), until it settles on
+`true`/`false` or a caller-supplied timeout elapses. Single responsibility, so
+it is unit-testable in isolation with a real TLS handshake over loopback TCP
+sockets (`CryptoNegotiatorTest`) rather than only through the full `TlsServer`.
+
+---
+
+### TlsServer (`src/TlsServer.php`)
+
+Structurally mirrors `ez-php/websocket`'s `Server`: same Fiber-per-connection
+event loop, same `stream_select()`-driven accept/resume cycle, same
+`handleConnection()` RFC 6455 frame dispatch. The differences are all in how a
+connection is admitted:
+
+1. `run()` builds an `ssl://` listener via `stream_socket_server()` with a
+   context carrying `local_cert`/`local_pk`/`passphrase`, instead of `tcp://`.
+2. `acceptConnection()` sets the accepted socket non-blocking, then calls
+   `CryptoNegotiator::negotiate()` before doing anything else. A connection
+   whose TLS handshake fails or times out is closed immediately — it never
+   reaches a `Connection` or `HandlerInterface`.
+3. Once TLS is established, the (now plaintext) stream is wrapped in
+   `EzPhp\WebSocket\Connection` exactly as `Server` would, so the RFC 6455
+   handshake, frame codec, and `HandlerInterface` contract are unchanged for
+   application code — swapping `Server` for `TlsServer` is a drop-in change.
+
+---
+
+## Design Decisions and Constraints
+
+- **Composition over inheritance, forced by `ez-php/websocket`'s own rules.**
+  `Server` is `final` and hardcodes `tcp://` in `run()`, so it cannot be
+  extended or configured for TLS. `Connection` is not — its constructor takes
+  any stream resource plus an ID string — so `TlsServer` reuses `Connection`
+  directly instead of duplicating the RFC 6455 handshake/frame logic, but had
+  to reimplement `Server`'s accept/event loop itself. Depends on
+  `ez-php/websocket` as an ordinary sibling dependency; no changes were made
+  to that package.
+- **TLS handshake negotiation is a bounded blocking poll, not Fiber-suspended.**
+  `CryptoNegotiator::negotiate()` retries `stream_socket_enable_crypto()` in a
+  short loop (`stream_select()` capped at 50ms per wait, total bounded by
+  `TlsServer::HANDSHAKE_TIMEOUT` = 5s) before a connection's Fiber is even
+  created. Fully async TLS negotiation would require extending the same
+  suspend/resume machinery `Server` uses for the WebSocket handshake to the
+  crypto layer as well — disproportionate complexity for what
+  `EZ_PHP_IDEAS.md` already flags as a low-priority extension ("a reverse
+  proxy already covers the common deployment"). The bounded poll only delays
+  the accept loop while a handshake is actually in flight for one connection
+  at a time; it does not block already-established connections, whose Fibers
+  are unaffected.
+- **`allow_self_signed: true`, `verify_peer: false` on the server-side SSL
+  context.** This is a server terminating client connections, not a client
+  verifying a server — there is no peer certificate to validate here (browsers
+  don't present client certs for `wss://`). These options only affect what the
+  server itself would reject if it initiated connections, which it doesn't.
+- **No certificate hot-reload / SNI / multiple certificates.** One
+  `certFile`/`keyFile` pair per `TlsServer` instance, read once by the
+  `stream_context` at `run()` time. Multi-domain or rotating-certificate setups
+  are exactly the case a reverse proxy handles better; out of scope here.
+
+---
+
+## Testing Approach
+
+- Test classes live in the shared `Tests\` namespace but must be uniquely named
+  across the whole monorepo — the root `phpunit.xml` loads every package in one
+  process, so a duplicate name is a fatal error, not a test failure. Prefix with
+  `WebsocketTls` when the obvious name is already taken.
+- No external infrastructure required, but unlike `ez-php/websocket`'s own
+  suite, `CryptoNegotiatorTest` needs a **real TLS handshake** to exercise
+  `stream_socket_enable_crypto()` meaningfully — `stream_socket_pair()` (UNIX
+  domain socket pairs) does **not** support SSL/crypto in PHP's stream layer
+  (confirmed empirically: `stream_socket_enable_crypto()` raises "This stream
+  does not support SSL/crypto" on such pairs), so tests bind real loopback TCP
+  sockets (`tcp://127.0.0.1:0`, letting the OS assign a free port) instead.
+- `TestCertificate` generates a throwaway self-signed certificate/key pair via
+  `openssl_pkey_new()`/`openssl_csr_new()`/`openssl_csr_sign()` into temp files
+  for each test, cleaned up in a `finally` block.
+- `CryptoNegotiatorTest` pumps both sides of a real handshake (server via the
+  class under test, client via a direct `stream_socket_enable_crypto()` call)
+  in a loop until both complete, and separately verifies `negotiate()` returns
+  `false` — rather than hanging — when the peer never speaks TLS at all.
+- `TlsServerTest` mirrors `ez-php/websocket`'s `ServerTest` boundary: only
+  constructor/accessors and `run()` failure modes (bad certificate path, port
+  already in use) are covered here. Full end-to-end tests (a real WSS client
+  completing the WebSocket handshake and exchanging frames) require running
+  the server in a separate process and are out of scope for this suite.
+
+---
+
+## What Does NOT Belong Here
+
+| Concern | Where it belongs |
+|---|---|
+| Plain-TCP WebSocket handshake, frame codec, pub/sub | `ez-php/websocket` (this module only changes how the socket is created and terminates TLS) |
+| SNI / multiple certificates / certificate rotation | Reverse proxy (nginx, Caddy) in front of the WebSocket process |
+| Client-side WSS connections (connecting *to* a WSS server) | Application layer, or a future WebSocket client package — this module is server-only |
+| SSE / server-sent events | `ez-php/broadcast` |
+| Authentication / authorization | Application handler, same as `ez-php/websocket` (`onOpen()`: inspect `header('origin')`/`header('cookie')`) |
