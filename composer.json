@@ -1,6 +1,6 @@
 {
   "name": "ez-php/websocket-tls",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "description": "TLS/WSS termination for ez-php/websocket — an ssl:// listener and Fiber event loop that hands negotiated connections to the plain WebSocket server's Connection/HandlerInterface.",
   "type": "library",
   "license": "MIT",
