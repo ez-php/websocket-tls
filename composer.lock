@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "159a27fe061b6e55ca90a69e3de75efa",
+    "content-hash": "3a69bcc8b25afbba693d42a90d538351",
     "packages": [
         {
             "name": "ez-php/websocket",
-            "version": "2.4.6",
+            "version": "2.4.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ez-php/websocket.git",
-                "reference": "4c37e60a8b6825d6d41dea213ad9e7c0d9ec7f12"
+                "reference": "f9f37fce50d9c56a89d68a9a524a845f2f2f513c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ez-php/websocket/zipball/4c37e60a8b6825d6d41dea213ad9e7c0d9ec7f12",
-                "reference": "4c37e60a8b6825d6d41dea213ad9e7c0d9ec7f12",
+                "url": "https://api.github.com/repos/ez-php/websocket/zipball/f9f37fce50d9c56a89d68a9a524a845f2f2f513c",
+                "reference": "f9f37fce50d9c56a89d68a9a524a845f2f2f513c",
                 "shasum": ""
             },
             "require": {
@@ -62,7 +62,7 @@
                 "issues": "https://github.com/ez-php/websocket/issues",
                 "source": "https://github.com/ez-php/websocket"
             },
-            "time": "2026-09-19T21:32:22+00:00"
+            "time": "2026-09-19T21:58:48+00:00"
         }
     ],
     "packages-dev": [
@@ -467,16 +467,16 @@
         },
         {
             "name": "ez-php/docker",
-            "version": "2.4.6",
+            "version": "2.4.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ez-php/docker.git",
-                "reference": "049b01ce986238044ca1a05df19e02b08c590d51"
+                "reference": "07c5b8f7ad03c380987dea9565885ddbaeed5e3d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ez-php/docker/zipball/049b01ce986238044ca1a05df19e02b08c590d51",
-                "reference": "049b01ce986238044ca1a05df19e02b08c590d51",
+                "url": "https://api.github.com/repos/ez-php/docker/zipball/07c5b8f7ad03c380987dea9565885ddbaeed5e3d",
+                "reference": "07c5b8f7ad03c380987dea9565885ddbaeed5e3d",
                 "shasum": ""
             },
             "require": {
@@ -497,9 +497,9 @@
             "description": "Docker base image source and scaffolding stubs for ez-php modules and projects",
             "support": {
                 "issues": "https://github.com/ez-php/docker/issues",
-                "source": "https://github.com/ez-php/docker/tree/v2.4.6"
+                "source": "https://github.com/ez-php/docker/tree/v2.4.7"
             },
-            "time": "2026-09-19T21:32:30+00:00"
+            "time": "2026-09-19T21:58:55+00:00"
         },
         {
             "name": "fidry/cpu-core-counter",
