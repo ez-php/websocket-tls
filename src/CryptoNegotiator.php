@@ -36,7 +36,10 @@ final class CryptoNegotiator
         $deadline = microtime(true) + $timeoutSeconds;
 
         while (true) {
-            $result = @stream_socket_enable_crypto($socket, true, $cryptoMethod);
+            // A failed handshake is reported as a warning as well as `false`; the return value is what matters.
+            [$result] = $this->callCapturingWarning(
+                static fn () => stream_socket_enable_crypto($socket, true, $cryptoMethod)
+            );
 
             if ($result === true || $result === false) {
                 return $result;
@@ -65,5 +68,34 @@ final class CryptoNegotiator
         $except = null;
 
         stream_select($read, $write, $except, 0, (int) ($waitSeconds * 1_000_000));
+    }
+
+    /**
+     * Run a stream/filesystem call with PHP warnings converted into a returned message
+     * instead of being emitted (replaces the `@` operator, which hides the reason).
+     *
+     * @template T
+     *
+     * @param callable(): T $fn
+     *
+     * @return array{0: T, 1: string|null} The call's result and the captured warning message, if any.
+     */
+    private function callCapturingWarning(callable $fn): array
+    {
+        $warning = null;
+
+        set_error_handler(static function (int $errno, string $errstr) use (&$warning): bool {
+            $warning = $errstr;
+
+            return true;
+        }, E_WARNING);
+
+        try {
+            $result = $fn();
+        } finally {
+            restore_error_handler();
+        }
+
+        return [$result, $warning];
     }
 }

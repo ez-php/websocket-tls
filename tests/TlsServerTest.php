@@ -13,11 +13,9 @@ use EzPhp\WebsocketTls\TlsServerException;
 /**
  * Unit-level tests for the TlsServer class.
  *
- * Full end-to-end tests (connect a real WSS client, send messages, verify the
- * handler fires) require running the server in a separate process and are out
- * of scope for this suite — see `ServerTest` in `ez-php/websocket` for the same
- * boundary, and `CryptoNegotiatorTest` for the real-handshake coverage this
- * module adds.
+ * The end-to-end behaviour (a real WSS client completing the handshake and
+ * exchanging frames) runs the server in a child process and lives in
+ * `TlsServerEndToEndTest`; `CryptoNegotiatorTest` covers the real TLS handshake.
  *
  * @covers \EzPhp\WebsocketTls\TlsServer
  */

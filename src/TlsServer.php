@@ -13,11 +13,17 @@ use Fiber;
 /**
  * TLS/WSS-terminating counterpart to `ez-php/websocket`'s `Server`.
  *
- * Listens on an `ssl://` stream socket instead of plain `tcp://`, negotiates
- * the TLS handshake for each accepted connection via {@see CryptoNegotiator},
- * then hands the now-plaintext stream to the same `Connection` class the
+ * Listens on a plain `tcp://` stream socket whose context carries the certificate,
+ * and negotiates the TLS handshake for each accepted connection via {@see CryptoNegotiator},
+ * then hands the negotiated stream to the same `Connection` class the
  * plain-TCP server uses — the RFC 6455 handshake, frame codec, and Fiber
  * event loop are unchanged.
+ *
+ * The listener is deliberately `tcp://`, not `ssl://`: on an `ssl://` server socket PHP
+ * completes the TLS handshake inside `stream_socket_accept()` — blocking the event loop
+ * on every slow or stalled client — and a second `stream_socket_enable_crypto()` on that
+ * already-encrypted socket then fails, which used to drop every connection. With `tcp://`
+ * the handshake is driven by the negotiator, non-blocking and bounded by a deadline.
  *
  * Usage:
  *
@@ -106,17 +112,26 @@ final class TlsServer
 
         $context = stream_context_create(['ssl' => $this->sslOptions()]);
 
-        $serverSocket = @stream_socket_server(
-            "ssl://{$this->host}:{$this->port}",
-            $errno,
-            $errstr,
-            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
-            $context,
+        $errno = 0;
+        $errstr = '';
+
+        [$serverSocket, $warning] = $this->callCapturingWarning(
+            function () use (&$errno, &$errstr, $context) {
+                return stream_socket_server(
+                    "tcp://{$this->host}:{$this->port}",
+                    $errno,
+                    $errstr,
+                    STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
+                    $context,
+                );
+            }
         );
 
         if ($serverSocket === false) {
+            $reason = $errstr !== '' ? $errstr : ($warning ?? 'unknown error');
+
             throw new TlsServerException(
-                "Cannot start WSS server on {$this->host}:{$this->port}: {$errstr} ({$errno})"
+                "Cannot start WSS server on {$this->host}:{$this->port}: {$reason} ({$errno})"
             );
         }
 
@@ -240,7 +255,8 @@ final class TlsServer
      */
     private function acceptConnection(HandlerInterface $handler, $serverSocket): void
     {
-        $clientSocket = @stream_socket_accept($serverSocket, 0);
+        // With a zero timeout "no pending connection" is reported as a warning; that is expected here.
+        [$clientSocket] = $this->callCapturingWarning(static fn () => stream_socket_accept($serverSocket, 0));
 
         if ($clientSocket === false) {
             return;
@@ -315,5 +331,34 @@ final class TlsServer
     private function removeConnection(int $rid): void
     {
         unset($this->connections[$rid], $this->fibers[$rid], $this->sockets[$rid]);
+    }
+
+    /**
+     * Run a stream/filesystem call with PHP warnings converted into a returned message
+     * instead of being emitted (replaces the `@` operator, which hides the reason).
+     *
+     * @template T
+     *
+     * @param callable(): T $fn
+     *
+     * @return array{0: T, 1: string|null} The call's result and the captured warning message, if any.
+     */
+    private function callCapturingWarning(callable $fn): array
+    {
+        $warning = null;
+
+        set_error_handler(static function (int $errno, string $errstr) use (&$warning): bool {
+            $warning = $errstr;
+
+            return true;
+        }, E_WARNING);
+
+        try {
+            $result = $fn();
+        } finally {
+            restore_error_handler();
+        }
+
+        return [$result, $warning];
     }
 }

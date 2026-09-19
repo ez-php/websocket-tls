@@ -1,6 +1,6 @@
 # ez-php/websocket-tls
 
-TLS/WSS termination for `ez-php/websocket` — an `ssl://` listener and Fiber event loop that hands negotiated connections to the plain WebSocket server's `Connection`/`HandlerInterface`.
+TLS/WSS termination for `ez-php/websocket` — a `tcp://` listener carrying the certificate and a Fiber event loop that hands negotiated connections to the plain WebSocket server's `Connection`/`HandlerInterface`.
 
 ---
 
