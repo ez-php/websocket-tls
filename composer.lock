@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "55ae9bed17400f1736ab7918baa376dd",
+    "content-hash": "dc57e1618c14f96d8c55bf70266df9f4",
     "packages": [
         {
             "name": "ez-php/websocket",

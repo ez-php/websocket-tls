@@ -157,7 +157,7 @@ final class TlsServer
     {
         $certPem = is_readable($this->certFile) ? file_get_contents($this->certFile) : false;
 
-        if ($certPem === false || @openssl_x509_read($certPem) === false) {
+        if ($certPem === false || self::quietly(static fn (): mixed => openssl_x509_read($certPem)) === false) {
             throw new TlsServerException(
                 "Cannot read a valid TLS certificate from {$this->certFile}: "
                 . (openssl_error_string() ?: 'file missing or not a PEM certificate')
@@ -167,11 +167,30 @@ final class TlsServer
         $keyFile = $this->keyFile ?? $this->certFile;
         $keyPem = is_readable($keyFile) ? file_get_contents($keyFile) : false;
 
-        if ($keyPem === false || @openssl_pkey_get_private($keyPem, $this->passphrase ?? '') === false) {
+        if ($keyPem === false || self::quietly(fn (): mixed => openssl_pkey_get_private($keyPem, $this->passphrase ?? '')) === false) {
             throw new TlsServerException(
                 "Cannot read a valid private key from {$keyFile}: "
                 . (openssl_error_string() ?: 'file missing or not a PEM private key')
             );
+        }
+    }
+
+    /**
+     * Run an OpenSSL call whose warning on bad input is reported through the
+     * exception message instead, keeping `openssl_error_string()` intact.
+     *
+     * @param callable(): mixed $call
+     *
+     * @return mixed
+     */
+    private static function quietly(callable $call): mixed
+    {
+        set_error_handler(static fn (): bool => true, E_WARNING);
+
+        try {
+            return $call();
+        } finally {
+            restore_error_handler();
         }
     }
 
