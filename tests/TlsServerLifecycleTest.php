@@ -98,6 +98,44 @@ final class TlsServerLifecycleTest extends TestCase
         self::assertSame(['open', 'message:hi', 'message:b', 'close'], $this->log->events);
     }
 
+    public function test_an_unmasked_client_frame_is_refused_with_1002(): void
+    {
+        [$peer, $fiber] = $this->upgraded();
+
+        fwrite($peer, chr(0x81) . chr(2) . 'hi'); // FIN + TEXT, no mask bit
+        $fiber->resume();
+
+        $close = $this->readServerFrame($peer);
+        self::assertSame(Opcode::CLOSE, $close->opcode);
+        self::assertSame(1002, unpack('n', $close->payload)[1] ?? null);
+        self::assertNotContains('message:hi', $this->log->events);
+        self::assertTrue($fiber->isTerminated());
+    }
+
+    public function test_a_fragmented_message_is_reassembled(): void
+    {
+        [$peer, $fiber] = $this->upgraded();
+
+        fwrite($peer, $this->rawFrame(Opcode::TEXT, 'he', fin: false));
+        fwrite($peer, $this->rawFrame(Opcode::CONTINUATION, 'llo', fin: true));
+        $fiber->resume();
+
+        self::assertSame('echo:hello', $this->readServerFrame($peer)->payload);
+        self::assertSame(['open', 'message:hello'], $this->log->events);
+    }
+
+    public function test_a_message_over_the_limit_is_refused_with_1009(): void
+    {
+        [$peer, $fiber] = $this->upgraded(maxMessageBytes: 4);
+
+        fwrite($peer, $this->rawFrame(Opcode::TEXT, 'ab', fin: false));
+        fwrite($peer, $this->rawFrame(Opcode::CONTINUATION, 'cde', fin: true));
+        $fiber->resume();
+
+        self::assertSame(1009, unpack('n', $this->readServerFrame($peer)->payload)[1] ?? null);
+        self::assertTrue($fiber->isTerminated());
+    }
+
     public function test_invalid_upgrade_request_is_reported_and_never_opens(): void
     {
         [$peer, $fiber] = $this->startConnection();
@@ -186,7 +224,7 @@ final class TlsServerLifecycleTest extends TestCase
     /**
      * @return array{0: resource, 1: Fiber<mixed, mixed, mixed, mixed>}
      */
-    private function startConnection(): array
+    private function startConnection(int $maxMessageBytes = 16 * 1024 * 1024): array
     {
         $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
         self::assertNotFalse($pair);
@@ -194,7 +232,7 @@ final class TlsServerLifecycleTest extends TestCase
         stream_set_blocking($serverSide, false);
         stream_set_blocking($peer, false);
 
-        $server = new TlsServer('127.0.0.1', 0, '/dev/null');
+        $server = new TlsServer('127.0.0.1', 0, '/dev/null', maxMessageBytes: $maxMessageBytes);
         $conn = new Connection($serverSide, '1');
         $method = new ReflectionMethod($server, 'handleConnection');
         $handler = $this->handler;
@@ -205,6 +243,33 @@ final class TlsServerLifecycleTest extends TestCase
         $fiber->start();
 
         return [$peer, $fiber];
+    }
+
+    /**
+     * A connection past the WebSocket upgrade.
+     *
+     * @return array{0: resource, 1: Fiber<mixed, mixed, mixed, mixed>}
+     */
+    private function upgraded(int $maxMessageBytes = 16 * 1024 * 1024): array
+    {
+        [$peer, $fiber] = $this->startConnection($maxMessageBytes);
+        fwrite($peer, $this->upgradeRequest());
+        $fiber->resume();
+        self::assertStringContainsString('101 Switching Protocols', (string) fread($peer, 4096));
+
+        return [$peer, $fiber];
+    }
+
+    private function rawFrame(Opcode $opcode, string $payload, bool $fin): string
+    {
+        $mask = "\x0a\x0b\x0c\x0d";
+        $masked = '';
+
+        for ($i = 0, $n = strlen($payload); $i < $n; $i++) {
+            $masked .= $payload[$i] ^ $mask[$i % 4];
+        }
+
+        return chr((($fin ? 0x80 : 0x00) | $opcode->value) & 0xFF) . chr((0x80 | strlen($payload)) & 0xFF) . $mask . $masked;
     }
 
     private function upgradeRequest(): string

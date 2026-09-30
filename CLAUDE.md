@@ -28,10 +28,11 @@ docker compose exec app composer full
 Executes in order:
 1. `sync_guidelines.php --check` — fails if any `CLAUDE.md` has drifted from this file
 2. `check_test_classes.php` — fails on a duplicate test class name (all packages share the `Tests\` namespace, so a collision is a fatal error in the aggregated run, not a test failure)
-3. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
-4. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
+3. `check_module_deps.php` — fails when a package's code imports an ez-php package its `composer.json` does not declare (module `src`: `require`/`suggest`; tests: `require`/`require-dev` and their dependencies), or requires one it never uses
+4. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
+5. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
    *(Note: `@PHP85Migration` does not exist yet in php-cs-fixer; `@PHP83Migration` is the highest available and is used intentionally even though the project targets PHP 8.5)*
-5. `phpunit` — all tests with coverage
+6. `phpunit` — all tests with coverage
 
 Individual commands when needed:
 ```
@@ -40,6 +41,7 @@ composer cs                  # CS Fixer only
 composer test                # PHPUnit only
 composer guidelines:check    # CLAUDE.md drift only
 composer test-classes:check  # duplicate test class names only
+composer module-deps:check   # undeclared / unused ez-php package dependencies only
 ```
 
 **PHPStan:** never suppress with `@phpstan-ignore-line` — always fix the root cause.
@@ -198,20 +200,22 @@ vendor/bin/docker-init
 
 This copies `Dockerfile`, `docker-compose.yml`, `.env.example`, `start.sh`, and `docker/` into the module, replacing `{{MODULE_NAME}}` placeholders. Existing files are never overwritten.
 
-Pass `--services` to merge MySQL/Redis/Meilisearch service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
+Pass `--services` to merge MySQL/Redis/Meilisearch/Memcached/Mailpit service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
 
 ```
 vendor/bin/docker-init --services=mysql
 vendor/bin/docker-init --services=redis
 vendor/bin/docker-init --services=meilisearch
 vendor/bin/docker-init --services=mysql,redis
+vendor/bin/docker-init --services=memcached,mailpit
 ```
 
-Pass `--extensions` to merge PHP extension install blocks (apt packages plus `docker-php-ext-install`/`pecl` lines) directly into `docker/app/Dockerfile`, instead of hand-editing it afterward — supported extensions: `bcmath`, `gmp`, `gd`, `imagick`:
+Pass `--extensions` to merge PHP extension install blocks (apt packages plus `docker-php-ext-install`/`pecl` lines) directly into `docker/app/Dockerfile`, instead of hand-editing it afterward — supported extensions: `bcmath`, `gmp`, `gd`, `imagick`, `memcached`, `apcu` (with `apc.enable_cli=1`):
 
 ```
 vendor/bin/docker-init --extensions=gmp,bcmath
 vendor/bin/docker-init --extensions=gd,imagick
+vendor/bin/docker-init --extensions=memcached,apcu
 ```
 
 When run from a module directory inside this monorepo, any requested extension not already present is also merged into the shared root `docker/app/Dockerfile` — the container `composer full` at the root actually runs against, distinct from the module's own standalone image.
@@ -308,8 +312,10 @@ sockets (`CryptoNegotiatorTest`) rather than only through the full `TlsServer`.
 ### TlsServer (`src/TlsServer.php`)
 
 Structurally mirrors `ez-php/websocket`'s `Server`: same Fiber-per-connection
-event loop, same `stream_select()`-driven accept/resume cycle, same
-`handleConnection()` RFC 6455 frame dispatch. The differences are all in how a
+event loop and `stream_select()`-driven accept/resume cycle; `handleConnection()`
+delegates to `EzPhp\WebSocket\ConnectionLifecycle`, the plain server's frame loop
+(masking check, fragment reassembly, `1002`/`1009` refusals, `maxMessageBytes`
+constructor argument, default 16 MiB). The differences are all in how a
 connection is admitted:
 
 1. `run()` builds a `tcp://` listener via `stream_socket_server()` with an SSL
@@ -336,18 +342,21 @@ connection is admitted:
   extended or configured for TLS. `Connection` is not — its constructor takes
   any stream resource plus an ID string — so `TlsServer` reuses `Connection`
   directly instead of duplicating the RFC 6455 handshake/frame logic, but had
-  to reimplement `Server`'s accept/event loop itself. Depends on
-  `ez-php/websocket` as an ordinary sibling dependency; no changes were made
-  to that package.
+  to reimplement `Server`'s accept/event loop itself. The per-connection frame
+  loop is *not* reimplemented: an earlier private copy lacked the plain server's
+  protocol checks (unmasked frames accepted, fragments truncated, no size
+  limit), so it now calls `ConnectionLifecycle`, which `ez-php/websocket`
+  exposes for exactly this. Depends on `ez-php/websocket` as an ordinary
+  sibling dependency (needs the release that ships `ConnectionLifecycle`).
 - **TLS handshake negotiation is a bounded blocking poll, not Fiber-suspended.**
   `CryptoNegotiator::negotiate()` retries `stream_socket_enable_crypto()` in a
   short loop (`stream_select()` capped at 50ms per wait, total bounded by
   `TlsServer::HANDSHAKE_TIMEOUT` = 5s) before a connection's Fiber is even
   created. Fully async TLS negotiation would require extending the same
   suspend/resume machinery `Server` uses for the WebSocket handshake to the
-  crypto layer as well — disproportionate complexity for what
-  `EZ_PHP_IDEAS.md` already flags as a low-priority extension ("a reverse
-  proxy already covers the common deployment"). The bounded poll only delays
+  crypto layer as well — disproportionate complexity, since terminating TLS
+  at a reverse proxy already covers the common deployment and this module is
+  the fallback for when there is none. The bounded poll only delays
   the accept loop while a handshake is actually in flight for one connection
   at a time; it does not block already-established connections, whose Fibers
   are unaffected.
@@ -386,9 +395,10 @@ connection is admitted:
 - `TlsServerTest` mirrors `ez-php/websocket`'s `ServerTest` boundary: only
   constructor/accessors and `run()` failure modes (bad certificate path, port
   already in use) are covered here, in-process.
-- `TlsServerLifecycleTest` covers, in-process and visible to coverage, what happens to a connection *after* TLS (`handleConnection()` over a socket pair, same cases as the plain server), the certificate/private-key validation and `sslOptions()`. `acceptConnection()` and the loop need a live TLS peer and stay with the end-to-end suite (TlsServer ≈ 60 % lines in-process).
+- `TlsServerLifecycleTest` covers, in-process and visible to coverage, what happens to a connection *after* TLS (`handleConnection()` over a socket pair: the plain server's cases plus an unmasked frame → `1002`, fragment reassembly and an oversized message → `1009`), the certificate/private-key validation and `sslOptions()`. `acceptConnection()` and the loop need a live TLS peer and stay with the end-to-end suite (TlsServer ≈ 60 % lines in-process).
 - `TlsServerEndToEndTest` runs a real `TlsServer` in a child process
-  (`php tests/Support/tls-echo-server.php`) and talks to it with a raw WSS
+  (`php tests/Support/tls-echo-server.php`, handed the parent run's Composer
+  autoloader so the monorepo suite resolves the local `ez-php/websocket`) and talks to it with a raw WSS
   client over loopback: TLS handshake, WebSocket upgrade, text echo, ping/pong,
   close, an invalid upgrade request (`HandshakeException` reaches `onError`),
   a client that never speaks TLS (dropped, server keeps serving), and two

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests;
 
+use Composer\Autoload\ClassLoader;
 use EzPhp\WebSocket\Frame;
 use EzPhp\WebSocket\Opcode;
+use ReflectionClass;
 use RuntimeException;
 
 /**
@@ -55,6 +57,7 @@ final class TlsServerEndToEndTest extends TestCase
                 self::$certificate->certFile,
                 self::$certificate->keyFile,
                 self::$log,
+                dirname((string) (new ReflectionClass(ClassLoader::class))->getFileName(), 2) . '/autoload.php',
             ],
             [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
             $pipes,

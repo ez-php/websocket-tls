@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace EzPhp\WebsocketTls;
 
 use EzPhp\WebSocket\Connection;
+use EzPhp\WebSocket\ConnectionLifecycle;
 use EzPhp\WebSocket\HandlerInterface;
-use EzPhp\WebSocket\HandshakeException;
-use EzPhp\WebSocket\Opcode;
+use EzPhp\WebSocket\Server;
 use Fiber;
 
 /**
@@ -73,6 +73,8 @@ final class TlsServer
      * @param string|null $keyFile     Path to a PEM-encoded private key, if kept
      *                                 separate from `$certFile`
      * @param string|null $passphrase  Passphrase protecting the private key, if any
+     * @param int         $maxMessageBytes Largest (reassembled) message accepted;
+     *                                 bigger ones are refused with close code 1009
      */
     public function __construct(
         private readonly string $host,
@@ -81,6 +83,7 @@ final class TlsServer
         private readonly ?string $keyFile = null,
         private readonly ?string $passphrase = null,
         ?CryptoNegotiator $cryptoNegotiator = null,
+        private readonly int $maxMessageBytes = Server::DEFAULT_MAX_MESSAGE_BYTES,
     ) {
         $this->cryptoNegotiator = $cryptoNegotiator ?? new CryptoNegotiator();
     }
@@ -308,40 +311,12 @@ final class TlsServer
 
     /**
      * Connection lifecycle: WebSocket handshake → frame loop → close.
-     * Runs inside a Fiber; suspends when no data is available.
+     * Runs inside a Fiber; delegates to the plain server's ConnectionLifecycle
+     * so both servers enforce the same protocol checks.
      */
     private function handleConnection(Connection $conn, HandlerInterface $handler): void
     {
-        try {
-            $conn->handshake();
-        } catch (HandshakeException $e) {
-            $handler->onError($conn, $e);
-            return;
-        }
-
-        $handler->onOpen($conn);
-
-        try {
-            while ($conn->isConnected()) {
-                $frame = $conn->readFrame();
-
-                if ($frame === null) {
-                    Fiber::suspend();
-                    continue;
-                }
-
-                match ($frame->opcode) {
-                    Opcode::TEXT, Opcode::BINARY => $handler->onMessage($conn, $frame),
-                    Opcode::CLOSE => $conn->close(),
-                    Opcode::PING => $conn->sendPong($frame->payload),
-                    Opcode::PONG, Opcode::CONTINUATION => null,
-                };
-            }
-        } catch (\Throwable $e) {
-            $handler->onError($conn, $e);
-        } finally {
-            $handler->onClose($conn);
-        }
+        (new ConnectionLifecycle($this->maxMessageBytes))->run($conn, $handler);
     }
 
     /**
