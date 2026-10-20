@@ -416,6 +416,6 @@ connection is admitted:
 |---|---|
 | Plain-TCP WebSocket handshake, frame codec, pub/sub | `ez-php/websocket` (this module only changes how the socket is created and terminates TLS) |
 | SNI / multiple certificates / certificate rotation | Reverse proxy (nginx, Caddy) in front of the WebSocket process |
-| Client-side WSS connections (connecting *to* a WSS server) | Application layer, or a future WebSocket client package — this module is server-only |
+| Client-side WSS connections (connecting *to* a WSS server) | `ez-php/websocket-client` (plain-TCP and TLS transports) — this module is server-only |
 | SSE / server-sent events | `ez-php/broadcast` |
 | Authentication / authorization | Application handler, same as `ez-php/websocket` (`onOpen()`: inspect `header('origin')`/`header('cookie')`) |
