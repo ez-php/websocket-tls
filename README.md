@@ -39,6 +39,30 @@ of a plain `ez-php/websocket` `Server` is simpler and still the recommended path
 Reach for this package when a reverse proxy isn't available in front of the
 WebSocket process itself.
 
+### Loop hooks
+
+`$server->hooks()` returns the same `EzPhp\WebSocket\LoopHooks` as the plain
+`Server` (ez-php/websocket 2.6+), so other code can join the TLS event loop:
+
+```php
+$hooks = $server->hooks();
+
+// Watch an extra socket (e.g. a Redis Pub/Sub connection) for readability.
+$hooks->addReadStream($redisSocket, function ($stream): void {
+    // read from $stream without blocking
+});
+
+// Run on every loop iteration (about every 50 ms) — timers, timeouts.
+$hooks->onTick(function (): void {
+    // ...
+});
+
+$server->run(new MyHandler());
+```
+
+`ez-php/graphql-subscriptions` uses both: its Redis relay registers its subscriber
+socket, and `GraphQLTransportWsHandler::tick()` enforces the connection-init timeout.
+
 ---
 
 ## License
