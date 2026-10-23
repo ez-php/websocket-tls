@@ -281,7 +281,7 @@ tests/
 ├── TestCase.php              — Base PHPUnit test case
 ├── TestCertificate.php       — generates a throwaway self-signed cert/key pair for TLS tests
 ├── CryptoNegotiatorTest.php  — real TLS handshakes over loopback TCP sockets
-├── TlsServerTest.php         — constructor/accessors, run() failure modes
+├── TlsServerTest.php         — constructor/accessors (incl. hooks()), run() failure modes
 ├── TlsServerLifecycleTest.php — in-process: handleConnection over socket pairs, certificate/key validation, sslOptions
 ├── TlsServerEndToEndTest.php — real TlsServer in a child process + raw WSS client: upgrade, echo, ping/pong, close, invalid upgrade, non-TLS client, concurrency
 └── Support/tls-echo-server.php — the child process: TlsServer + echo handler that logs lifecycle callbacks to a file
@@ -332,7 +332,9 @@ connection is admitted:
    `CryptoNegotiator::negotiate()` before doing anything else. A connection
    whose TLS handshake fails or times out is closed immediately — it never
    reaches a `Connection` or `HandlerInterface`.
-3. Once TLS is established, the (now plaintext) stream is wrapped in
+3. `hooks()` exposes the same `EzPhp\WebSocket\LoopHooks` as `Server` — extra read streams and tick
+   callbacks join this loop too, so `ez-php/graphql-subscriptions`' Redis relay and init timeout work over WSS.
+4. Once TLS is established, the (now plaintext) stream is wrapped in
    `EzPhp\WebSocket\Connection` exactly as `Server` would, so the RFC 6455
    handshake, frame codec, and `HandlerInterface` contract are unchanged for
    application code — swapping `Server` for `TlsServer` is a drop-in change.

@@ -7,6 +7,7 @@ namespace EzPhp\WebsocketTls;
 use EzPhp\WebSocket\Connection;
 use EzPhp\WebSocket\ConnectionLifecycle;
 use EzPhp\WebSocket\HandlerInterface;
+use EzPhp\WebSocket\LoopHooks;
 use EzPhp\WebSocket\Server;
 use Fiber;
 
@@ -63,6 +64,8 @@ final class TlsServer
 
     private int $nextId = 1;
 
+    private readonly LoopHooks $hooks;
+
     private readonly CryptoNegotiator $cryptoNegotiator;
 
     /**
@@ -89,6 +92,18 @@ final class TlsServer
         private readonly array $subprotocols = [],
     ) {
         $this->cryptoNegotiator = $cryptoNegotiator ?? new CryptoNegotiator();
+        $this->hooks = new LoopHooks();
+    }
+
+    /**
+     * Extension points of the event loop: extra read streams (e.g. a Redis Pub/Sub
+     * socket) and per-iteration tick callbacks (timers). Register them before run().
+     *
+     * @return LoopHooks
+     */
+    public function hooks(): LoopHooks
+    {
+        return $this->hooks;
     }
 
     /**
@@ -234,6 +249,9 @@ final class TlsServer
             foreach ($this->sockets as $socket) {
                 $read[] = $socket;
             }
+            foreach ($this->hooks->readStreams() as $stream) {
+                $read[] = $stream;
+            }
 
             $write = null;
             $except = null;
@@ -251,6 +269,8 @@ final class TlsServer
 
                 if ($readable === $serverSocket) {
                     $this->acceptConnection($handler, $serverSocket);
+                } elseif ($this->hooks->dispatchReadable($readable)) {
+                    continue;
                 } else {
                     $rid = get_resource_id($readable);
                     $fiber = $this->fibers[$rid] ?? null;
@@ -268,6 +288,8 @@ final class TlsServer
                     $this->removeConnection($rid);
                 }
             }
+
+            $this->hooks->tick();
         }
     }
 

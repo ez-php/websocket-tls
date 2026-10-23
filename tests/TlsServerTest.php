@@ -7,6 +7,7 @@ namespace Tests;
 use EzPhp\WebSocket\ConnectionInterface;
 use EzPhp\WebSocket\Frame;
 use EzPhp\WebSocket\HandlerInterface;
+use EzPhp\WebSocket\LoopHooks;
 use EzPhp\WebsocketTls\TlsServer;
 use EzPhp\WebsocketTls\TlsServerException;
 
@@ -48,6 +49,14 @@ final class TlsServerTest extends TestCase
 
         self::assertSame('127.0.0.1', $server->host());
         self::assertSame(9443, $server->port());
+    }
+
+    public function test_hooks_are_one_shared_instance(): void
+    {
+        $server = new TlsServer('127.0.0.1', 9443, '/dev/null');
+
+        self::assertInstanceOf(LoopHooks::class, $server->hooks());
+        self::assertSame($server->hooks(), $server->hooks());
     }
 
     public function test_run_throws_when_the_certificate_is_invalid(): void
