@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "cedbf397ce30ef966ca25c7e229b8d77",
+    "content-hash": "de10181a6f6d8c21a157c6c200b3b55a",
     "packages": [
         {
             "name": "ez-php/websocket",
-            "version": "2.5.10",
+            "version": "2.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ez-php/websocket.git",
-                "reference": "27fa2b14b2f2ed9c40e5d143568299c4898c448f"
+                "reference": "f9efe785fcc763d83beeacb51e6bc20d1c6bbc55"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ez-php/websocket/zipball/27fa2b14b2f2ed9c40e5d143568299c4898c448f",
-                "reference": "27fa2b14b2f2ed9c40e5d143568299c4898c448f",
+                "url": "https://api.github.com/repos/ez-php/websocket/zipball/f9efe785fcc763d83beeacb51e6bc20d1c6bbc55",
+                "reference": "f9efe785fcc763d83beeacb51e6bc20d1c6bbc55",
                 "shasum": ""
             },
             "require": {
@@ -62,7 +62,7 @@
                 "issues": "https://github.com/ez-php/websocket/issues",
                 "source": "https://github.com/ez-php/websocket"
             },
-            "time": "2026-10-23T12:04:25+00:00"
+            "time": "2026-10-23T23:11:52+00:00"
         }
     ],
     "packages-dev": [
