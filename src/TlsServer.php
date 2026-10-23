@@ -75,6 +75,8 @@ final class TlsServer
      * @param string|null $passphrase  Passphrase protecting the private key, if any
      * @param int         $maxMessageBytes Largest (reassembled) message accepted;
      *                                 bigger ones are refused with close code 1009
+     * @param list<string> $subprotocols Subprotocols to negotiate (`Sec-WebSocket-Protocol`),
+     *                                 in preference order — e.g. `['graphql-transport-ws']`
      */
     public function __construct(
         private readonly string $host,
@@ -84,6 +86,7 @@ final class TlsServer
         private readonly ?string $passphrase = null,
         ?CryptoNegotiator $cryptoNegotiator = null,
         private readonly int $maxMessageBytes = Server::DEFAULT_MAX_MESSAGE_BYTES,
+        private readonly array $subprotocols = [],
     ) {
         $this->cryptoNegotiator = $cryptoNegotiator ?? new CryptoNegotiator();
     }
@@ -291,7 +294,7 @@ final class TlsServer
             return;
         }
 
-        $conn = new Connection($clientSocket, (string) $this->nextId++);
+        $conn = new Connection($clientSocket, (string) $this->nextId++, $this->subprotocols);
         $rid = get_resource_id($clientSocket);
 
         $this->connections[$rid] = $conn;

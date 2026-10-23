@@ -22,6 +22,7 @@ $server = new TlsServer(
     port: 8443,
     certFile: '/etc/ssl/certs/example.com.pem',
     keyFile: '/etc/ssl/private/example.com.key',
+    // optional: subprotocols: ['graphql-transport-ws'] — negotiated like the plain Server
 );
 
 $server->run(new MyHandler()); // implements EzPhp\WebSocket\HandlerInterface, blocks until interrupted
