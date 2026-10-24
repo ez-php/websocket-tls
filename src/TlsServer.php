@@ -8,6 +8,7 @@ use EzPhp\WebSocket\Connection;
 use EzPhp\WebSocket\ConnectionLifecycle;
 use EzPhp\WebSocket\HandlerInterface;
 use EzPhp\WebSocket\LoopHooks;
+use EzPhp\WebSocket\PerMessageDeflateConfig;
 use EzPhp\WebSocket\Server;
 use Fiber;
 
@@ -80,6 +81,7 @@ final class TlsServer
      *                                 bigger ones are refused with close code 1009
      * @param list<string> $subprotocols Subprotocols to negotiate (`Sec-WebSocket-Protocol`),
      *                                 in preference order — e.g. `['graphql-transport-ws']`
+     * @param PerMessageDeflateConfig|null $compression Accept permessage-deflate offers (RFC 7692); null = never
      */
     public function __construct(
         private readonly string $host,
@@ -90,6 +92,7 @@ final class TlsServer
         ?CryptoNegotiator $cryptoNegotiator = null,
         private readonly int $maxMessageBytes = Server::DEFAULT_MAX_MESSAGE_BYTES,
         private readonly array $subprotocols = [],
+        private readonly ?PerMessageDeflateConfig $compression = null,
     ) {
         $this->cryptoNegotiator = $cryptoNegotiator ?? new CryptoNegotiator();
         $this->hooks = new LoopHooks();
@@ -316,7 +319,7 @@ final class TlsServer
             return;
         }
 
-        $conn = new Connection($clientSocket, (string) $this->nextId++, $this->subprotocols);
+        $conn = new Connection($clientSocket, (string) $this->nextId++, $this->subprotocols, $this->compression);
         $rid = get_resource_id($clientSocket);
 
         $this->connections[$rid] = $conn;

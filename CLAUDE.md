@@ -319,7 +319,8 @@ delegates to `EzPhp\WebSocket\ConnectionLifecycle`, the plain server's frame loo
 (masking check, fragment reassembly, `1002`/`1009` refusals, `maxMessageBytes`
 constructor argument, default 16 MiB). Its optional `subprotocols` argument is passed to
 each `Connection`, exactly like the plain server's, so `Sec-WebSocket-Protocol`
-negotiation (e.g. `graphql-transport-ws`) works over WSS too. The differences are all in how a
+negotiation (e.g. `graphql-transport-ws`) works over WSS too; the optional `compression`
+(`PerMessageDeflateConfig`) is passed the same way, so permessage-deflate behaves as on `Server`. The differences are all in how a
 connection is admitted:
 
 1. `run()` builds a `tcp://` listener via `stream_socket_server()` with an SSL
@@ -422,5 +423,5 @@ connection is admitted:
 | Plain-TCP WebSocket handshake, frame codec, pub/sub | `ez-php/websocket` (this module only changes how the socket is created and terminates TLS) |
 | SNI / multiple certificates / certificate rotation | Reverse proxy (nginx, Caddy) in front of the WebSocket process |
 | Client-side WSS connections (connecting *to* a WSS server) | `ez-php/websocket-client` (plain-TCP and TLS transports) — this module is server-only |
-| SSE / server-sent events | `ez-php/broadcast` |
+| SSE / server-sent events | `ez-php/http` (`StreamedResponse::sse()`, `Sse\SseEvent`) |
 | Authentication / authorization | Application handler, same as `ez-php/websocket` (`onOpen()`: inspect `header('origin')`/`header('cookie')`) |

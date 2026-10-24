@@ -23,6 +23,7 @@ $server = new TlsServer(
     certFile: '/etc/ssl/certs/example.com.pem',
     keyFile: '/etc/ssl/private/example.com.key',
     // optional: subprotocols: ['graphql-transport-ws'] — negotiated like the plain Server
+    // optional: compression: new PerMessageDeflateConfig() — permessage-deflate, as on the plain Server
 );
 
 $server->run(new MyHandler()); // implements EzPhp\WebSocket\HandlerInterface, blocks until interrupted
