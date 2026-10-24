@@ -4,32 +4,35 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2a41d0792b42b3d729bdb7b17cd32ca0",
+    "content-hash": "5609995d83bc8262dfdf5f911e8c6391",
     "packages": [
         {
             "name": "ez-php/websocket",
-            "version": "2.6.0",
+            "version": "2.6.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ez-php/websocket.git",
-                "reference": "f9efe785fcc763d83beeacb51e6bc20d1c6bbc55"
+                "reference": "6d5ffa4528e0e8f46236ac8d2f14bd7ba8546930"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ez-php/websocket/zipball/f9efe785fcc763d83beeacb51e6bc20d1c6bbc55",
-                "reference": "f9efe785fcc763d83beeacb51e6bc20d1c6bbc55",
+                "url": "https://api.github.com/repos/ez-php/websocket/zipball/6d5ffa4528e0e8f46236ac8d2f14bd7ba8546930",
+                "reference": "6d5ffa4528e0e8f46236ac8d2f14bd7ba8546930",
                 "shasum": ""
             },
             "require": {
                 "php": "^8.5"
             },
             "require-dev": {
-                "ez-php/docker": "^2.0",
+                "ez-php/docker": "^2.6.0",
                 "friendsofphp/php-cs-fixer": "^3.94",
                 "phpstan/phpstan": "^2.1",
                 "phpstan/phpstan-deprecation-rules": "^2.0",
                 "phpstan/phpstan-strict-rules": "^2.0",
                 "phpunit/phpunit": "^13.0"
+            },
+            "suggest": {
+                "ext-zlib": "Needed for permessage-deflate compression (PerMessageDeflateConfig)"
             },
             "type": "library",
             "autoload": {
@@ -62,7 +65,7 @@
                 "issues": "https://github.com/ez-php/websocket/issues",
                 "source": "https://github.com/ez-php/websocket"
             },
-            "time": "2026-10-23T23:11:52+00:00"
+            "time": "2026-10-24T18:05:37+00:00"
         }
     ],
     "packages-dev": [

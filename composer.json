@@ -19,7 +19,7 @@
   "require": {
     "php": "^8.5",
     "ext-openssl": "*",
-    "ez-php/websocket": "^2.6.0"
+    "ez-php/websocket": "^2.6.2"
   },
   "require-dev": {
     "ez-php/docker": "^2.6.0",
