@@ -1,6 +1,6 @@
 {
   "name": "ez-php/websocket-tls",
-  "version": "2.6.5",
+  "version": "2.7.0",
   "description": "TLS/WSS termination for ez-php/websocket — an ssl:// listener and Fiber event loop that hands negotiated connections to the plain WebSocket server's Connection/HandlerInterface.",
   "type": "library",
   "license": "MIT",
@@ -19,10 +19,10 @@
   "require": {
     "php": "^8.5",
     "ext-openssl": "*",
-    "ez-php/websocket": "^2.6.2"
+    "ez-php/websocket": "^2.7.0"
   },
   "require-dev": {
-    "ez-php/docker": "^2.6.0",
+    "ez-php/docker": "^2.7.0",
     "phpunit/phpunit": "^13.0",
     "phpstan/phpstan": "^2.1",
     "friendsofphp/php-cs-fixer": "^3.94",
